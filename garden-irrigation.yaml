@@ -1,5 +1,5 @@
 esphome:
-  name: garden-irrigation
+  name: "garden-irrigationg"
 
 esp32:
   board: esp32dev
@@ -21,61 +21,130 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
-  # Enable fallback hotspot (captive portal) in case wifi connection fails, also enable the "captive_portal:" line
-  # ap:
-    #ssid: "Garden-Irrigation-Setup"
-    #password: "21J4CFLwJbvq"
-
-# captive_portal:
-
 # Enable Web server.
 web_server:
   port: 80
 
-# Example configuration entry
 light:
   - platform: status_led
     name: "Switch Led state"
+    internal: True
     pin: GPIO25
 
+# Sync time with Home Assistant.
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+# Set up Sprinkler component
+# Defines two zones with a timer
+sprinkler:
+  - id: irrigation_controller
+    pump_start_pump_delay: 2s
+    pump_stop_valve_delay: 2s
+    main_switch: "Irrigation Controller"
+    auto_advance_switch: "Irrigation Auto Advance"
+    valves:
+      - valve_switch: "Zone 1: Planten"
+        run_duration_number:
+          id: garden_zone1_run_duration
+          name: "Zone 1: Duration"
+          initial_value: 10
+          unit_of_measurement: min
+        valve_switch_id: relaygroup_zone1_switch
+        pump_switch_id: relaygroup_pump_and_power_switch
+      - valve_switch: "Zone 2: Grasveld"
+        run_duration_number:
+          id: garden_zone2_run_duration
+          name: "Zone 2: Duration"
+          initial_value: 25
+          unit_of_measurement: min
+        valve_switch_id: relaygroup_zone2_switch
+        pump_switch_id: relaygroup_pump_and_power_switch
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal Sensor"
+    update_interval: 10min
+    entity_category: "diagnostic"
+  - platform: uptime
+    name: Uptime Sensor
+    update_interval: 10min
+    entity_category: "diagnostic"
+
 switch:
+  # Pysical GPIO based switches
   - platform: gpio
-    id: switch_pin_1
-    name: "Pin 1 GPIO33"
+    id: relay_1
+    #name: "Relay 1 GPIO33"
     pin: GPIO33
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    id: switch_pin_2
-    name: "Pin 2 GPIO32"
+    id: relay_2
+    #name: "Relay 2 GPIO32"
     pin: GPIO32
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    id: switch_pin_3
-    name: "Pin 3 GPIO13"
+    id: relay_3
+    #name: "Relay 3 GPIO13"
     pin: GPIO13
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    id: switch_pin_4
-    name: "Pin 4 GPIO12"
+    id: relay_4
+    #name: "Relay 4 GPIO12"
     pin: GPIO12
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    id: switch_pin_5
-    name: "Pin 5 GPIO21"
+    id: relay_5
+    #name: "Relay 5 GPIO21"
     pin: GPIO21
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    id: switch_pin_6
-    name: "Pin 6 GPIO19"
+    id: relay_6
+    #name: "Relay 6 GPIO19"
     pin: GPIO19
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    id: switch_pin_7
-    name: "Pin 7 GPIO18"
+    id: relay_7
+    #name: "Relay 7 GPIO18 (24v AC supply)"
     pin: GPIO18
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    id: switch_pin_8
-    name: "Pin 8 GPIO5"
+    id: relay_8
+    #name: "Relay 8 GPIO5 (Pump)"
     pin: GPIO5
     restore_mode: ALWAYS_OFF
+  
+  # Virtual Switch for the Pump and 24v AC powersupply (for all Rainbird valves)
+  - platform: template
+    id: relaygroup_pump_and_power_switch
+    name: "Pump and Valve power"
+    lambda: !lambda return id(relay_7).state || id(relay_8).state;
+    turn_on_action:
+      - switch.turn_on: relay_7
+      - switch.turn_on: relay_8
+    turn_off_action:
+      - switch.turn_off: relay_7
+      - switch.turn_off: relay_8
+  # Virtual Switch for merging relay 1 and 3 into Zone 1
+  - platform: template
+    id: relaygroup_zone1_switch
+    name: "Relay 1 & 3 (Planten)"
+    lambda: !lambda return id(relay_1).state || id(relay_3).state;
+    turn_on_action:
+      - switch.turn_on: relay_1
+      - switch.turn_on: relay_3
+    turn_off_action:
+      - switch.turn_off: relay_1
+      - switch.turn_off: relay_3
+  # Virtual Switch for merging relay 2 and 4 into Zone 2
+  - platform: template
+    id: relaygroup_zone2_switch
+    name: "Relay 2 & 4 (Grasveld)"
+    lambda: !lambda return id(relay_2).state || id(relay_4).state;
+    turn_on_action:
+      - switch.turn_on: relay_2
+      - switch.turn_on: relay_4
+    turn_off_action:
+      - switch.turn_off: relay_2
+      - switch.turn_off: relay_4
